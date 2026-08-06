@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nagoya Run Builder | 名古屋ランニングコース作成</title>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Work+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eaf7f5;
+  --bg-deep:#d9f0ec;
+  --surface:#ffffff;
+  --surface-2:#f2fbf9;
+  --line:rgba(15,58,55,.12);
+  --line-strong:rgba(15,58,55,.28);
+  --red:#12ab9d;
+  --red-soft:#0c8377;
+  --chalk:#123a37;
+  --onaccent:#ffffff;
+  --grass:#7bc47f;
+  --muted:#4f716d;
+  --radius:3px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);
+  background-image:radial-gradient(circle at 15% 8%, rgba(18,171,157,.08), transparent 40%);
+  color:var(--chalk);
+  font-family:'Work Sans', sans-serif;
+  font-weight:300;
+}
+h1,h2,h3,.display-font{
+  font-family:'Bebas Neue', sans-serif;
+  letter-spacing:.03em;
+  font-weight:400;
+}
+.mono{font-family:'JetBrains Mono', monospace;}
+a{color:var(--red-soft);}
+
+/* ambient chalk track lines */
+.track-lines{
+  background-image:repeating-linear-gradient(90deg, transparent 0 78px, var(--line) 78px 80px);
+}
+
+/* NAV */
+.navbar-run{
+  background:rgba(234,247,245,.88);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.navbar-run .navbar-brand{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.5rem;
+  letter-spacing:.05em;
+  color:var(--chalk)!important;
+}
+.navbar-run .navbar-brand span{color:var(--red-soft);}
+.navbar-run .nav-link{color:var(--muted)!important;font-size:.9rem;}
+.navbar-run .nav-link:hover{color:var(--red-soft)!important;}
+
+/* HERO */
+.hero{
+  padding:7.5rem 0 4rem;
+  position:relative;
+  overflow:hidden;
+}
+.hero .eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;
+  letter-spacing:.22em;
+  color:var(--red-soft);
+  text-transform:uppercase;
+}
+.hero h1{
+  font-size:clamp(3rem,7vw,5.4rem);
+  line-height:.95;
+  margin:.5rem 0 1rem;
+  color:var(--chalk);
+}
+.hero h1 em{font-style:normal;color:var(--red);}
+.hero p.lede{color:var(--muted);max-width:32rem;font-size:1.05rem;}
+
+.bezel-wrap{position:relative;width:100%;max-width:360px;margin:0 auto;}
+.bezel-wrap svg{width:100%;height:auto;}
+.lane{
+  fill:none;
+  stroke:var(--line-strong);
+  stroke-width:1;
+  stroke-dasharray:6 6;
+  opacity:0;
+  animation:ring-in .9s ease forwards;
+}
+.lane.solid{stroke-dasharray:none;stroke:var(--red);opacity:0;animation:ring-in .9s ease forwards;}
+@keyframes ring-in{from{opacity:0;transform:scale(.85);}to{opacity:1;transform:scale(1);}}
+.bezel-wrap svg{transform-origin:center;}
+.lane-label{font-family:'JetBrains Mono',monospace;font-size:8px;fill:var(--muted);}
+@media (prefers-reduced-motion: reduce){.lane{animation:none;opacity:1;}}
+
+/* SECTION */
+section{padding:4.5rem 0;}
+.section-head .eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.7rem;letter-spacing:.2em;color:var(--red-soft);text-transform:uppercase;
+}
+.section-head h2{font-size:clamp(1.8rem,3.4vw,2.6rem);margin-top:.3rem;color:var(--chalk);}
+.divider{height:1px;background:linear-gradient(90deg,var(--line-strong),transparent);margin:0 0 3.5rem;}
+
+/* BUILDER PANEL */
+.builder{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:2.2rem;
+}
+.field-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.7rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;
+  margin-bottom:.7rem;display:block;
+}
+
+/* distance readout */
+.dist-readout{
+  display:flex;align-items:baseline;gap:.5rem;margin-bottom:.6rem;
+}
+.dist-readout .num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:4rem;color:var(--chalk);line-height:1;
+}
+.dist-readout .unit{font-family:'JetBrains Mono',monospace;color:var(--red-soft);font-size:1rem;}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:2px;background:var(--line-strong);border-radius:2px;outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--red);
+  border:3px solid var(--onaccent);cursor:pointer;margin-top:-8px;
+}
+input[type=range]::-moz-range-thumb{
+  width:18px;height:18px;border-radius:50%;background:var(--red);border:3px solid var(--onaccent);cursor:pointer;
+}
+
+/* toggle buttons */
+.toggle-group{display:flex;gap:.5rem;}
+.toggle-btn{
+  flex:1;
+  background:transparent;border:1px solid var(--line-strong);color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:.78rem;letter-spacing:.06em;
+  padding:.65rem .5rem;border-radius:var(--radius);cursor:pointer;transition:.15s;
+}
+.toggle-btn.active{background:var(--red);border-color:var(--red);color:var(--onaccent);}
+
+/* bib cards for start point presets */
+.bib-row{display:flex;gap:.7rem;overflow-x:auto;padding-bottom:.4rem;}
+.bib{
+  position:relative;
+  flex:0 0 auto;
+  width:126px;
+  background:var(--surface-2);
+  border:1px dashed var(--line-strong);
+  border-radius:var(--radius);
+  padding:1rem .7rem .7rem;
+  cursor:pointer;
+  transition:.15s;
+}
+.bib::before,.bib::after{
+  content:"";position:absolute;top:6px;width:5px;height:5px;border-radius:50%;background:var(--bg-deep);border:1px solid var(--line-strong);
+}
+.bib::before{left:6px;}
+.bib::after{right:6px;}
+.bib.active{border-color:var(--red);background:rgba(18,171,157,.12);}
+.bib .bib-no{font-family:'JetBrains Mono',monospace;color:var(--red-soft);font-size:.68rem;letter-spacing:.06em;}
+.bib .bib-name{font-size:.82rem;margin-top:.3rem;color:var(--chalk);line-height:1.3;}
+
+/* compass bezel for direction */
+.compass{
+  position:relative;width:190px;height:190px;margin:.5rem auto 0;
+  border-radius:50%;border:1px dashed var(--line-strong);
+}
+.compass::after{
+  content:"";position:absolute;inset:26px;border-radius:50%;border:1px solid var(--line);
+}
+.compass .center-label{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted);letter-spacing:.08em;
+}
+.dir-btn{
+  position:absolute;width:34px;height:34px;border-radius:50%;
+  background:var(--surface-2);border:1px solid var(--line-strong);color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:.62rem;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;
+  transform:translate(-50%,-50%);
+}
+.dir-btn.active{background:var(--red);border-color:var(--red);color:var(--onaccent);}
+
+/* pace chips */
+.chip-row{display:flex;flex-wrap:wrap;gap:.5rem;}
+.chip{
+  border:1px solid var(--line-strong);color:var(--muted);background:transparent;
+  font-family:'JetBrains Mono',monospace;font-size:.76rem;padding:.4rem .8rem;border-radius:20px;cursor:pointer;
+}
+.chip.active{background:var(--grass);border-color:var(--grass);color:var(--chalk);}
+
+.btn-run{
+  background:var(--red);border:none;color:var(--onaccent);
+  font-family:'JetBrains Mono',monospace;letter-spacing:.08em;font-size:.86rem;
+  padding:.85rem 1.6rem;border-radius:var(--radius);width:100%;
+  transition:.15s;
+}
+.btn-run:hover{background:var(--red-soft);color:var(--bg-deep);}
+.btn-run:disabled{background:var(--surface-2);color:var(--muted);}
+
+/* result */
+#map{height:460px;width:100%;border:1px solid var(--line-strong);}
+.map-shell{border:1px solid var(--line);background:var(--bg-deep);padding:6px;}
+.split-bar{
+  display:flex;flex-wrap:wrap;border:1px solid var(--line);margin-top:1rem;
+}
+.split{flex:1;min-width:130px;padding:1rem 1.2rem;border-right:1px solid var(--line);}
+.split:last-child{border-right:none;}
+.split .split-num{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--chalk);}
+.split .split-lbl{font-family:'JetBrains Mono',monospace;font-size:.66rem;color:var(--muted);letter-spacing:.06em;}
+.status-line{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--muted);min-height:1.4em;}
+.leaflet-popup-content-wrapper{background:var(--surface);color:var(--chalk);border-radius:2px;}
+.leaflet-popup-tip{background:var(--surface);}
+.leaflet-control-zoom a{background:var(--surface)!important;color:var(--chalk)!important;border-color:var(--line)!important;}
+
+footer{border-top:1px solid var(--line);padding:2rem 0;font-size:.78rem;color:var(--muted);}
+footer .mono{color:var(--red-soft);}
+</style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md fixed-top navbar-run py-3">
+  <div class="container">
+    <a class="navbar-brand" href="#top">NAGOYA<span>RUN</span>BUILDER</a>
+    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse justify-content-end" id="nav">
+      <ul class="navbar-nav gap-md-4">
+        <li class="nav-item"><a class="nav-link" href="#builder">コース設定</a></li>
+        <li class="nav-item"><a class="nav-link" href="#result">ルート結果</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<header class="hero track-lines" id="top">
+  <div class="container">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-6">
+        <span class="eyebrow">Nagoya / Route Generator</span>
+        <h1>走りたい<em>距離</em>から<br>コースをつくる</h1>
+        <p class="lede">距離・周回か片道か・スタート地点を選ぶだけ。実際の道路網に沿ったランニングコースを自動で組み立てます。</p>
+        <a href="#builder" class="btn btn-run mt-3" style="width:auto;display:inline-block;">コースを作る ↓</a>
+      </div>
+      <div class="col-lg-6">
+        <div class="bezel-wrap">
+          <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+            <circle class="lane" cx="150" cy="150" r="60" style="animation-delay:.1s"/>
+            <circle class="lane" cx="150" cy="150" r="90" style="animation-delay:.25s"/>
+            <circle class="lane" cx="150" cy="150" r="120" style="animation-delay:.4s"/>
+            <circle class="lane solid" cx="150" cy="150" r="140" style="animation-delay:.55s"/>
+            <text class="lane-label" x="150" y="16" text-anchor="middle" style="opacity:0;animation:ring-in .6s ease forwards .8s;">LANE 1</text>
+            <text class="lane-label" x="150" y="46" text-anchor="middle" style="opacity:0;animation:ring-in .6s ease forwards .9s;">LANE 2</text>
+            <text class="lane-label" x="150" y="76" text-anchor="middle" style="opacity:0;animation:ring-in .6s ease forwards 1.0s;">LANE 3</text>
+            <g style="opacity:0;animation:ring-in .6s ease forwards 1.2s;">
+              <text x="150" y="140" text-anchor="middle" font-family="Bebas Neue" font-size="46" fill="#123a37">RUN</text>
+              <text x="150" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#0c8377" letter-spacing="2">NAGOYA CITY</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="builder">
+  <div class="container">
+    <div class="section-head mb-4">
+      <span class="eyebrow">01 / Build</span>
+      <h2>コースを設定する</h2>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-7">
+        <div class="builder">
+          <div class="mb-4">
+            <span class="field-label">距離</span>
+            <div class="dist-readout"><span class="num" id="distNum">8.0</span><span class="unit">KM</span></div>
+            <input type="range" id="distSlider" min="1" max="25" step="0.5" value="8">
+          </div>
+
+          <div class="mb-4">
+            <span class="field-label">コースタイプ</span>
+            <div class="toggle-group">
+              <button class="toggle-btn active" id="modeLoop">周回コース（スタートに戻る）</button>
+              <button class="toggle-btn" id="modeOneway">片道コース</button>
+            </div>
+          </div>
+
+          <div class="mb-4" id="compassWrap" style="display:none;">
+            <span class="field-label">進む方角</span>
+            <div class="compass" id="compass">
+              <div class="center-label">START</div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <span class="field-label">スタート地点</span>
+            <div class="bib-row" id="bibRow"></div>
+            <div class="status-line mt-2" id="startStatus">選択中: 名古屋工業大学（御器所キャンパス）</div>
+          </div>
+
+          <div class="mb-4">
+            <span class="field-label">目標ペース（見積タイム用）</span>
+            <div class="chip-row" id="paceChips"></div>
+          </div>
+
+          <button class="btn-run" id="generateBtn">ルートを生成する</button>
+          <div class="status-line mt-2" id="genStatus"></div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="builder h-100">
+          <span class="field-label">仕組み</span>
+          <p class="text-muted" style="font-size:.9rem;">
+            OpenStreetMapの道路網（OSRM ルーティングエンジン）を使い、指定した距離に近づくよう
+            スタート地点の周りにポイントを生成 → 実際に歩ける経路を計算 → 誤差が大きければ半径や距離を調整して再計算、を最大3回繰り返します。
+          </p>
+          <p class="text-muted" style="font-size:.9rem;">
+            そのため表示される距離は「実測ルート距離」。目標とぴったり一致しないことがありますが、道路に沿った現実的なコースになります。近づかない場合は「再生成」を押してください。
+          </p>
+          <span class="field-label mt-3">ヒント</span>
+          <ul class="text-muted" style="font-size:.87rem;padding-left:1.1rem;">
+            <li>周回コースは公園の外周や河川敷が組みやすい</li>
+            <li>片道コースは駅チカのスタート／ゴールが便利</li>
+            <li>短距離（3km以下）は住宅街だと迂回が増えやすい</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="container"><div class="divider"></div></div>
+
+<section id="result">
+  <div class="container">
+    <div class="section-head mb-4">
+      <span class="eyebrow">02 / Result</span>
+      <h2>生成されたコース</h2>
+    </div>
+    <div class="map-shell">
+      <div id="map"></div>
+    </div>
+    <div class="split-bar" id="splitBar">
+      <div class="split"><div class="split-num" id="splitDist">—</div><div class="split-lbl">実測距離 (KM)</div></div>
+      <div class="split"><div class="split-num" id="splitTime">—</div><div class="split-lbl">推定タイム</div></div>
+      <div class="split"><div class="split-num" id="splitType">—</div><div class="split-lbl">コースタイプ</div></div>
+      <div class="split"><div class="split-num" id="splitDiff">—</div><div class="split-lbl">目標との差</div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container d-flex flex-wrap justify-content-between gap-2">
+    <span>名古屋市内 ランニングコース・ジェネレーター</span>
+    <span class="mono">Bootstrap 5.3 + Leaflet + OSRM (foot profile)</span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/* ---------- data ---------- */
+const startPoints = [
+  {no:"001", name:"名古屋工業大学", lat:35.1560, lng:136.9245},
+  {no:"002", name:"鶴舞公園",       lat:35.1571, lng:136.9316},
+  {no:"003", name:"名古屋城",       lat:35.1856, lng:136.8994},
+  {no:"004", name:"熱田神宮",       lat:35.1281, lng:136.9075},
+  {no:"005", name:"久屋大通公園",   lat:35.1745, lng:136.9088},
+  {no:"006", name:"白川公園",       lat:35.1637, lng:136.9053},
+  {no:"007", name:"山崎川green road", lat:35.1120, lng:136.9530},
+  {no:"008", name:"中村公園",       lat:35.1740, lng:136.8659}
+];
+const paceOptions = [
+  {label:"5'00\"/km", sec:300},
+  {label:"5'30\"/km", sec:330},
+  {label:"6'00\"/km", sec:360},
+  {label:"6'30\"/km", sec:390},
+  {label:"7'00\"/km", sec:420}
+];
+const dirOptions = [
+  {label:"北", deg:0},{label:"北東", deg:45},{label:"東", deg:90},{label:"南東", deg:135},
+  {label:"南", deg:180},{label:"南西", deg:225},{label:"西", deg:270},{label:"北西", deg:315}
+];
+
+let state = {
+  start: startPoints[0],
+  mode: 'loop',
+  targetKm: 8,
+  bearing: 90,
+  paceSec: 360
+};
+
+/* ---------- build UI: bibs ---------- */
+const bibRow = document.getElementById('bibRow');
+startPoints.forEach((p,i)=>{
+  const el = document.createElement('div');
+  el.className = 'bib' + (i===0 ? ' active' : '');
+  el.innerHTML = `<div class="bib-no">BIB ${p.no}</div><div class="bib-name">${p.name}</div>`;
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.bib').forEach(b=>b.classList.remove('active'));
+    el.classList.add('active');
+    state.start = p;
+    document.getElementById('startStatus').textContent = `選択中: ${p.name}`;
+  });
+  bibRow.appendChild(el);
+});
+
+/* ---------- pace chips ---------- */
+const paceChips = document.getElementById('paceChips');
+paceOptions.forEach((p,i)=>{
+  const el = document.createElement('button');
+  el.className = 'chip' + (p.sec===360 ? ' active':'');
+  el.textContent = p.label;
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    el.classList.add('active');
+    state.paceSec = p.sec;
+  });
+  paceChips.appendChild(el);
+});
+
+/* ---------- compass ---------- */
+const compass = document.getElementById('compass');
+const R = 78, CX = 95, CY = 95;
+dirOptions.forEach(d=>{
+  const rad = (d.deg - 90) * Math.PI/180;
+  const x = CX + R*Math.cos(rad), y = CY + R*Math.sin(rad);
+  const btn = document.createElement('div');
+  btn.className = 'dir-btn' + (d.deg===90 ? ' active':'');
+  btn.style.left = x+'px'; btn.style.top = y+'px';
+  btn.textContent = d.label;
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.dir-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.bearing = d.deg;
+  });
+  compass.appendChild(btn);
+});
+
+/* ---------- distance slider ---------- */
+const distSlider = document.getElementById('distSlider');
+const distNum = document.getElementById('distNum');
+distSlider.addEventListener('input', ()=>{
+  state.targetKm = parseFloat(distSlider.value);
+  distNum.textContent = state.targetKm.toFixed(1);
+});
+
+/* ---------- mode toggle ---------- */
+const modeLoop = document.getElementById('modeLoop');
+const modeOneway = document.getElementById('modeOneway');
+const compassWrap = document.getElementById('compassWrap');
+modeLoop.addEventListener('click', ()=>{
+  state.mode='loop'; modeLoop.classList.add('active'); modeOneway.classList.remove('active');
+  compassWrap.style.display='none';
+});
+modeOneway.addEventListener('click', ()=>{
+  state.mode='oneway'; modeOneway.classList.add('active'); modeLoop.classList.remove('active');
+  compassWrap.style.display='block';
+});
+
+/* ---------- map ---------- */
+const map = L.map('map', {scrollWheelZoom:false}).setView([35.17, 136.90], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:19
+}).addTo(map);
+let routeLayer = null, startMarker = null, endMarker = null;
+
+/* ---------- geo helpers ---------- */
+function destPoint(lat,lng,bearingDeg,distKm){
+  const R=6371;
+  const brng = bearingDeg*Math.PI/180;
+  const lat1=lat*Math.PI/180, lng1=lng*Math.PI/180;
+  const lat2=Math.asin(Math.sin(lat1)*Math.cos(distKm/R)+Math.cos(lat1)*Math.sin(distKm/R)*Math.cos(brng));
+  const lng2=lng1+Math.atan2(Math.sin(brng)*Math.sin(distKm/R)*Math.cos(lat1), Math.cos(distKm/R)-Math.sin(lat1)*Math.sin(lat2));
+  return {lat: lat2*180/Math.PI, lng: lng2*180/Math.PI};
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ---------- OSRM calls ---------- */
+async function fetchTrip(start, waypoints){
+  const coords = [start, ...waypoints].map(p=>`${p.lng},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/trip/v1/foot/${coords}?roundtrip=true&source=first&geometries=geojson&overview=full`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.code !== 'Ok') throw new Error(data.message || 'trip failed');
+  return data.trips[0];
+}
+async function fetchRoute(a,b){
+  const url = `https://router.project-osrm.org/route/v1/foot/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.code !== 'Ok') throw new Error(data.message || 'route failed');
+  return data.routes[0];
+}
+
+function loopWaypoints(start, radiusKm, n){
+  const pts=[];
+  for(let i=0;i<n;i++){
+    const angle = (360/n)*i + (Math.random()*20-10);
+    pts.push(destPoint(start.lat,start.lng,angle,radiusKm));
+  }
+  return pts;
+}
+
+async function generateLoop(start, targetKm, statusEl){
+  let scale = 1, best = null;
+  for(let attempt=0; attempt<3; attempt++){
+    statusEl.textContent = `計算中… (${attempt+1}/3回目)`;
+    const radius = (targetKm/(2*Math.PI)) * 0.78 * scale;
+    const wps = loopWaypoints(start, Math.max(radius,0.15), 6);
+    try{
+      const trip = await fetchTrip(start, wps);
+      const distKm = trip.distance/1000;
+      if(!best || Math.abs(distKm-targetKm) < Math.abs(best.distKm-targetKm)){
+        best = {distKm, geometry: trip.geometry};
+      }
+      if(Math.abs(distKm-targetKm)/targetKm < 0.1) break;
+      scale *= (targetKm/distKm);
+    }catch(e){ /* try again with next attempt */ }
+    await sleep(350);
+  }
+  return best;
+}
+
+async function generateOneway(start, targetKm, bearingDeg, statusEl){
+  let dist = targetKm, best = null;
+  for(let attempt=0; attempt<3; attempt++){
+    statusEl.textContent = `計算中… (${attempt+1}/3回目)`;
+    const end = destPoint(start.lat, start.lng, bearingDeg, dist);
+    try{
+      const route = await fetchRoute(start, end);
+      const distKm = route.distance/1000;
+      if(!best || Math.abs(distKm-targetKm) < Math.abs(best.distKm-targetKm)){
+        best = {distKm, geometry: route.geometry, end};
+      }
+      if(Math.abs(distKm-targetKm)/targetKm < 0.1) break;
+      dist *= (targetKm/distKm);
+    }catch(e){ /* try again */ }
+    await sleep(350);
+  }
+  return best;
+}
+
+function fmtTime(totalSec){
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = Math.round(totalSec%60);
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+/* ---------- generate button ---------- */
+const generateBtn = document.getElementById('generateBtn');
+const genStatus = document.getElementById('genStatus');
+
+generateBtn.addEventListener('click', async ()=>{
+  generateBtn.disabled = true;
+  genStatus.textContent = '準備中…';
+  document.getElementById('result').scrollIntoView({behavior:'smooth'});
+
+  if(routeLayer){ map.removeLayer(routeLayer); routeLayer=null; }
+  if(startMarker){ map.removeLayer(startMarker); startMarker=null; }
+  if(endMarker){ map.removeLayer(endMarker); endMarker=null; }
+
+  let result;
+  try{
+    if(state.mode==='loop'){
+      result = await generateLoop(state.start, state.targetKm, genStatus);
+    }else{
+      result = await generateOneway(state.start, state.targetKm, state.bearing, genStatus);
+    }
+  }catch(e){
+    result = null;
+  }
+
+  if(!result){
+    genStatus.textContent = 'ルート計算サービスに接続できませんでした。少し待ってから再試行してください。';
+    generateBtn.disabled = false;
+    return;
+  }
+
+  routeLayer = L.geoJSON(result.geometry, {
+    style:{color:'#12ab9d', weight:5, opacity:.9}
+  }).addTo(map);
+
+  startMarker = L.circleMarker([state.start.lat, state.start.lng], {
+    radius:7, color:'#ffffff', fillColor:'#7bc47f', fillOpacity:1, weight:2
+  }).addTo(map).bindPopup(`<b>START</b><br>${state.start.name}`);
+
+  if(state.mode==='oneway' && result.end){
+    endMarker = L.circleMarker([result.end.lat, result.end.lng], {
+      radius:7, color:'#ffffff', fillColor:'#12ab9d', fillOpacity:1, weight:2
+    }).addTo(map).bindPopup('GOAL');
+  }
+
+  map.fitBounds(routeLayer.getBounds(), {padding:[24,24]});
+
+  const diff = result.distKm - state.targetKm;
+  document.getElementById('splitDist').textContent = result.distKm.toFixed(2);
+  document.getElementById('splitTime').textContent = fmtTime(result.distKm * state.paceSec);
+  document.getElementById('splitType').textContent = state.mode==='loop' ? '周回' : '片道';
+  document.getElementById('splitDiff').textContent = (diff>=0?'+':'') + diff.toFixed(2) + 'km';
+
+  genStatus.textContent = '生成完了。近い距離にならない場合は再度「ルートを生成する」を押してください。';
+  generateBtn.disabled = false;
+});
+</script>
+</body>
+</html>
